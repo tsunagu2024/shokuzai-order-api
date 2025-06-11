@@ -3,34 +3,36 @@ from pydantic import BaseModel
 import asyncpg
 from fastapi.middleware.cors import CORSMiddleware
 import os
+from datetime import datetime
 
 app = FastAPI()
 
-# CORSの設定
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # v0からのアクセス許可
+    allow_origins=["*"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# 環境変数からDB接続情報を取得
 DB_URL = os.getenv("DATABASE_URL")
 
 class Order(BaseModel):
     poster: str
     item: str
-    quantity: str   # ← ここをstrに修正！（今回の本質部分）
-    deliveryDate: str  # ISO8601形式の日付文字列
+    quantity: str
+    deliveryDate: str  # ここはAPI受け取り時は文字列のままでOK
 
 @app.post("/orders")
 async def create_order(order: Order):
     conn = await asyncpg.connect(DB_URL)
     try:
+        # ここで文字列→日付変換を追加
+        delivery_date_obj = datetime.strptime(order.deliveryDate, "%Y-%m-%d").date()
+
         await conn.execute("""
             INSERT INTO orders (poster, item, quantity, delivery_date)
             VALUES ($1, $2, $3, $4)
-        """, order.poster, order.item, order.quantity, order.deliveryDate)
+        """, order.poster, order.item, order.quantity, delivery_date_obj)
     finally:
         await conn.close()
 
