@@ -15,10 +15,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# DB URL取得
+# 環境変数からDB URLを取得
 DATABASE_URL = os.getenv("DATABASE_URL")
 
-# DB接続
+# DB接続関数
 async def connect_db():
     return await asyncpg.connect(DATABASE_URL)
 
@@ -49,7 +49,7 @@ async def create_order(order: Order):
         await conn.close()
     return {"message": "Order created successfully"}
 
-# GET（これは今のままでOK）
+# GET: 全件取得（確認用）
 @app.get("/orders")
 async def read_orders():
     conn = await connect_db()
