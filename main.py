@@ -6,10 +6,10 @@ import os
 
 app = FastAPI()
 
-# CORS設定追加（これでv0からもアクセス可能！）
+# CORS設定
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # 必要に応じて特定のドメインだけ許可することも可能
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -21,7 +21,7 @@ DB_URL = os.environ.get("DATABASE_URL")
 class Order(BaseModel):
     poster: str
     item: str
-    quantity: int
+    quantity: str  # ← 数量も文字列型に変更！（柔軟対応）
     deliveryDate: str
 
 @app.post("/orders")
