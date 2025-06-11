@@ -1,64 +1,61 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List
-import asyncpg
 import os
-from fastapi.middleware.cors import CORSMiddleware
+import asyncpg
 
-# CORS設定（v0 と繋ぐために必要）
 app = FastAPI()
 
+# CORS設定
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # 必要なら特定のURLに絞ってOK
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Supabase接続情報
-DATABASE_URL = os.environ.get("DATABASE_URL")
+# 環境変数からDB URLを取得
+DATABASE_URL = os.getenv("DATABASE_URL")
 
-# 注文データの入力スキーマ
-class OrderCreate(BaseModel):
-    poster: str
-    item: str
-    quantity: int
-    delivery_date: str  # ここが今回の修正ポイント！（strに変更）
-
-# 注文データの出力スキーマ
+# Pydanticモデル (Supabaseのordersテーブルに合わせて修正)
 class Order(BaseModel):
-    id: int
-    created_at: str
     poster: str
     item: str
     quantity: int
     delivery_date: str
 
-# 注文登録エンドポイント
-@app.post("/orders", response_model=Order)
-async def create_order(order: OrderCreate):
+# データベース接続用非同期関数
+async def connect_db():
+    return await asyncpg.connect(DATABASE_URL)
+
+# POST: 新規注文登録API
+@app.post("/orders")
+async def create_order(order: Order):
+    conn = await connect_db()
     try:
-        conn = await asyncpg.connect(DATABASE_URL)
-        row = await conn.fetchrow("""
+        await conn.execute(
+            """
             INSERT INTO orders (poster, item, quantity, delivery_date)
             VALUES ($1, $2, $3, $4)
-            RETURNING id, created_at, poster, item, quantity, delivery_date
-        """, order.poster, order.item, order.quantity, order.delivery_date)
+            """,
+            order.poster,
+            order.item,
+            order.quantity,
+            order.delivery_date
+        )
+    finally:
         await conn.close()
-        return dict(row)
-    except Exception as e:
-        print(e)
-        raise HTTPException(status_code=500, detail="注文の登録に失敗しました")
+    return {"message": "Order created successfully"}
 
-# 全件取得エンドポイント（確認用）
+# GET: 確認用の全件取得API
 @app.get("/orders", response_model=List[Order])
-async def get_orders():
+async def read_orders():
+    conn = await connect_db()
     try:
-        conn = await asyncpg.connect(DATABASE_URL)
-        rows = await conn.fetch("SELECT id, created_at, poster, item, quantity, delivery_date FROM orders ORDER BY id DESC")
+        rows = await conn.fetch("SELECT poster, item, quantity, delivery_date FROM orders")
+        orders = [Order(**dict(row)) for row in rows]
+    finally:
         await conn.close()
-        return [dict(row) for row in rows]
-    except Exception as e:
-        print(e)
-        raise HTTPException(status_code=500, detail="注文の取得に失敗しました")
+    return orders
