@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Form
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List
@@ -19,20 +19,18 @@ app.add_middleware(
 # 環境変数からDB URLを取得
 DATABASE_URL = os.getenv("DATABASE_URL")
 
-# Pydanticモデル (Supabaseのordersテーブルに合わせて修正)
-class Order(BaseModel):
-    poster: str
-    item: str
-    quantity: int
-    delivery_date: str
-
-# データベース接続用非同期関数
+# DB接続関数
 async def connect_db():
     return await asyncpg.connect(DATABASE_URL)
 
-# POST: 新規注文登録API
+# POST: 注文受付（Form対応／quantityはstrで受取→int変換）
 @app.post("/orders")
-async def create_order(order: Order):
+async def create_order(
+    poster: str = Form(...),
+    item: str = Form(...),
+    quantity: str = Form(...),
+    deliveryDate: str = Form(...)
+):
     conn = await connect_db()
     try:
         await conn.execute(
@@ -40,22 +38,30 @@ async def create_order(order: Order):
             INSERT INTO orders (poster, item, quantity, delivery_date)
             VALUES ($1, $2, $3, $4)
             """,
-            order.poster,
-            order.item,
-            order.quantity,
-            order.delivery_date
+            poster,
+            item,
+            int(quantity),
+            deliveryDate
         )
     finally:
         await conn.close()
     return {"message": "Order created successfully"}
 
-# GET: 確認用の全件取得API
-@app.get("/orders", response_model=List[Order])
+# GET: 全件取得
+@app.get("/orders")
 async def read_orders():
     conn = await connect_db()
     try:
         rows = await conn.fetch("SELECT poster, item, quantity, delivery_date FROM orders")
-        orders = [Order(**dict(row)) for row in rows]
+        results = [
+            {
+                "poster": row["poster"],
+                "item": row["item"],
+                "quantity": row["quantity"],
+                "deliveryDate": str(row["delivery_date"])
+            }
+            for row in rows
+        ]
     finally:
         await conn.close()
-    return orders
+    return results
