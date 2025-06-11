@@ -1,7 +1,6 @@
-from fastapi import FastAPI, Form
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import List
 import os
 import asyncpg
 
@@ -16,21 +15,24 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 環境変数からDB URLを取得
+# DB URL取得
 DATABASE_URL = os.getenv("DATABASE_URL")
 
-# DB接続関数
+# DB接続
 async def connect_db():
     return await asyncpg.connect(DATABASE_URL)
 
-# POST: 注文受付（Form対応／quantityはstrで受取→int変換）
+# Pydanticモデル定義（JSON受信用）
+class Order(BaseModel):
+    投稿日時: str
+    投稿者名: str
+    食材名: str
+    数量: str
+    配達希望日: str
+
+# POST: JSON形式で受信
 @app.post("/orders")
-async def create_order(
-    poster: str = Form(...),
-    item: str = Form(...),
-    quantity: str = Form(...),
-    deliveryDate: str = Form(...)
-):
+async def create_order(order: Order):
     conn = await connect_db()
     try:
         await conn.execute(
@@ -38,16 +40,16 @@ async def create_order(
             INSERT INTO orders (poster, item, quantity, delivery_date)
             VALUES ($1, $2, $3, $4)
             """,
-            poster,
-            item,
-            int(quantity),
-            deliveryDate
+            order.投稿者名,
+            order.食材名,
+            order.数量,
+            order.配達希望日
         )
     finally:
         await conn.close()
     return {"message": "Order created successfully"}
 
-# GET: 全件取得
+# GET（これは今のままでOK）
 @app.get("/orders")
 async def read_orders():
     conn = await connect_db()
