@@ -1,11 +1,22 @@
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import asyncpg
 import os
 
 app = FastAPI()
 
-DB_URL = "postgresql://postgres:tsunagu.2024@db.jnuspnuovbqshzghmvlh.supabase.co:5432/postgres"
+# CORS設定追加（これでv0からもアクセス可能！）
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # 必要に応じて特定のドメインだけ許可することも可能
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# データベース接続情報
+DB_URL = os.environ.get("DATABASE_URL")
 
 class Order(BaseModel):
     poster: str
