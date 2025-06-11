@@ -1,37 +1,40 @@
 from fastapi import FastAPI, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import asyncpg
 import os
+import datetime
+from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI()
 
-# CORS設定
+# CORS設定：v0からアクセス可能に
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["*"],  # 必要に応じて制限可能
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# データベース接続情報
-DB_URL = os.environ.get("DATABASE_URL")
+# 環境変数からDB接続情報を取得
+DB_URL = os.getenv("DATABASE_URL")
 
 class Order(BaseModel):
     poster: str
     item: str
-    quantity: str  # ← 数量も文字列型に変更！（柔軟対応）
-    deliveryDate: str
+    quantity: int
+    deliveryDate: str  # ISO8601形式の文字列
 
 @app.post("/orders")
 async def create_order(order: Order):
     conn = await asyncpg.connect(DB_URL)
     try:
+        # deliveryDateをdate型に変換
+        delivery_date_obj = datetime.date.fromisoformat(order.deliveryDate)
         await conn.execute("""
             INSERT INTO orders (poster, item, quantity, delivery_date)
             VALUES ($1, $2, $3, $4)
-        """, order.poster, order.item, order.quantity, order.deliveryDate)
+        """, order.poster, order.item, order.quantity, delivery_date_obj)
     finally:
         await conn.close()
 
@@ -54,9 +57,8 @@ async def get_orders():
                 "poster": row["poster"],
                 "item": row["item"],
                 "quantity": row["quantity"],
-                "delivery_date": row["delivery_date"].isoformat()
+                "delivery_date": row["delivery_date"].isoformat(),
             })
+        return result
     finally:
         await conn.close()
-
-    return result
