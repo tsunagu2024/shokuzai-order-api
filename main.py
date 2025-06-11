@@ -1,41 +1,36 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI
 from pydantic import BaseModel
 import asyncpg
-import os
-from datetime import datetime
 from fastapi.middleware.cors import CORSMiddleware
+import os
 
 app = FastAPI()
 
-# CORS設定（v0と繋ぐ用）
+# CORSの設定
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # 本番運用時は適切に制限推奨
-    allow_credentials=True,
+    allow_origins=["*"],  # v0からのアクセス許可
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# 環境変数からDB接続URLを取得
+# 環境変数からDB接続情報を取得
 DB_URL = os.getenv("DATABASE_URL")
 
 class Order(BaseModel):
     poster: str
     item: str
-    quantity: int
-    deliveryDate: str  # ここはISO8601文字列 (例: "2025-06-18")
+    quantity: str   # ← ここをstrに修正！（今回の本質部分）
+    deliveryDate: str  # ISO8601形式の日付文字列
 
 @app.post("/orders")
 async def create_order(order: Order):
     conn = await asyncpg.connect(DB_URL)
     try:
-        # 文字列をdate型に変換
-        delivery_date_obj = datetime.strptime(order.deliveryDate, "%Y-%m-%d").date()
-
         await conn.execute("""
             INSERT INTO orders (poster, item, quantity, delivery_date)
             VALUES ($1, $2, $3, $4)
-        """, order.poster, order.item, order.quantity, delivery_date_obj)
+        """, order.poster, order.item, order.quantity, order.deliveryDate)
     finally:
         await conn.close()
 
@@ -50,17 +45,17 @@ async def get_orders():
             FROM orders
             ORDER BY created_at DESC
         """)
-        result = []
-        for row in rows:
-            result.append({
-                "id": row["id"],
-                "created_at": row["created_at"].isoformat(),
-                "poster": row["poster"],
-                "item": row["item"],
-                "quantity": row["quantity"],
-                "delivery_date": row["delivery_date"].isoformat(),
-            })
     finally:
         await conn.close()
 
+    result = []
+    for row in rows:
+        result.append({
+            "id": row["id"],
+            "created_at": row["created_at"].isoformat(),
+            "poster": row["poster"],
+            "item": row["item"],
+            "quantity": row["quantity"],
+            "delivery_date": row["delivery_date"].isoformat()
+        })
     return result
